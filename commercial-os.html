@@ -594,7 +594,7 @@ function ModuleROI() {
   const Field=({label,k,unit,note})=>(
     <div style={{marginBottom:10}}>
       <div style={{fontSize:12,color:C.textMuted,marginBottom:3}}>{label}{note&&<span style={{color:C.accent,marginLeft:6,fontSize:11}}>{note}</span>}</div>
-  <div style={S.row}><input style={{...S.input,width:130}} type="text" inputMode="decimal" value={v[k]} onChange={e=>set(k,e.target.value.replace(",","."))} />{unit&&<span style={{fontSize:12,color:C.textMuted}}>{unit}</span>}</div>
+  <div style={S.row}><input style={{...S.input,width:130}} type="text" inputMode="decimal" defaultValue={v[k]} onBlur={e=>set(k,e.target.value.replace(",","."))} />{unit&&<span style={{fontSize:12,color:C.textMuted}}>{unit}</span>}</div>
     </div>
   );
   return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
