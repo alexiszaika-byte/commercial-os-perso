@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Commercial OS — Méca-Système</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0A0C10; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: #12151C; }
+  ::-webkit-scrollbar-thumb { background: #252B38; border-radius: 3px; }
+  input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback } = React;
+
+const C = {
+  bg:"#0A0C10",surface:"#12151C",surfaceHigh:"#1A1F2B",border:"#252B38",
+  accent:"#E63946",accentDim:"#8B1F25",accentGlow:"rgba(230,57,70,0.15)",
+  gold:"#F4A261",green:"#2EC4B6",greenDim:"#1A7A73",
+  text:"#E8EAF0",textMuted:"#6B7280",textDim:"#9CA3AF",navy:"#1E3A5F",
+  blue:"#60A5FA",orange:"#FB923C",purple:"#A78BFA",
+};
+
+const S = {
+  app:{background:C.bg,minHeight:"100vh",fontFamily:"'Inter','Segoe UI',sans-serif",color:C.text,display:"flex",flexDirection:"column"},
+  topBar:{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"0 16px",display:"flex",alignItems:"center",gap:6,height:50,flexWrap:"wrap"},
+  logo:{fontWeight:800,fontSize:13,letterSpacing:"0.08em",color:C.accent,textTransform:"uppercase",marginRight:8,whiteSpace:"nowrap"},
+  navBtn:(a)=>({background:a?C.accentGlow:"transparent",border:`1px solid ${a?C.accent:"transparent"}`,color:a?C.accent:C.textDim,padding:"4px 10px",borderRadius:6,cursor:"pointer",fontSize:11,fontWeight:500,transition:"all 0.15s",whiteSpace:"nowrap"}),
+  main:{flex:1,padding:"18px",maxWidth:1140,width:"100%",margin:"0 auto",boxSizing:"border-box"},
+  statusBar:{background:C.surface,borderTop:`1px solid ${C.border}`,padding:"6px 16px",display:"flex",gap:20,alignItems:"center",flexWrap:"wrap"},
+  statusItem:{display:"flex",gap:6,alignItems:"center",fontSize:11},
+  statusLabel:{color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em"},
+  statusVal:{color:C.text,fontWeight:700,fontFamily:"monospace"},
+  card:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:16,marginBottom:12},
+  h2:{fontSize:16,fontWeight:700,marginBottom:12,color:C.text},
+  h3:{fontSize:11,fontWeight:600,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:8},
+  input:{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:6,padding:"7px 10px",color:C.text,fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
+  select:{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:6,padding:"7px 10px",color:C.text,fontSize:13,outline:"none",cursor:"pointer"},
+  btn:(v="primary")=>({background:v==="primary"?C.accent:v==="ghost"?"transparent":C.surfaceHigh,border:`1px solid ${v==="ghost"?C.border:v==="primary"?C.accent:C.border}`,color:v==="primary"?"#fff":C.textDim,padding:"7px 14px",borderRadius:6,cursor:"pointer",fontSize:13,fontWeight:600,transition:"all 0.15s",whiteSpace:"nowrap"}),
+  tag:(color)=>({background:`${color}20`,color,border:`1px solid ${color}40`,borderRadius:4,padding:"2px 7px",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}),
+  row:{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"},
+  textarea:{background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:6,padding:"8px 10px",color:C.text,fontSize:13,outline:"none",width:"100%",boxSizing:"border-box",resize:"vertical",minHeight:100,lineHeight:1.6},
+  tabBtn:(a)=>({background:a?C.surfaceHigh:"transparent",border:`1px solid ${a?C.border:"transparent"}`,color:a?C.text:C.textMuted,padding:"4px 12px",borderRadius:6,cursor:"pointer",fontSize:12,fontWeight:500}),
+  kpi:(color)=>({background:C.surface,border:`1px solid ${C.border}`,borderTop:`3px solid ${color}`,borderRadius:10,padding:"10px 14px",flex:"1 1 120px"}),
+};
+
+const load=(k,fb)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):fb}catch{return fb}};
+const save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
+const uid=()=>Date.now()+Math.random().toString(36).slice(2,6);
+const today=()=>new Date().toISOString().slice(0,10);
+const fmt=(n)=>(parseFloat(n)||0).toLocaleString("fr-FR",{minimumFractionDigits:0});
+const SC={
+  "En cours":C.gold,"Relance":C.blue,"Signé":C.green,"Perdu":C.textMuted,
+  "Urgent":C.accent,"Résolu":C.green,"En attente":C.gold,"Escaladé":C.accent,
+  "Ouvert":C.blue,"Fermé":C.textMuted,"En garantie":C.green,
+  "Hors garantie":C.accent,"Expirée":C.textMuted,"En traitement":C.purple,
+};
+
+const callClaude=async(prompt,maxTokens=1000)=>{
+  const res=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:maxTokens,messages:[{role:"user",content:prompt}]})
+  });
+  const data=await res.json();
+  return data.content?.map(b=>b.text||"").join("")||"Erreur IA.";
+};
+
+function ModuleTaches() {
+  const [taches,setTaches]=useState(()=>load("cos_taches",[]));
+  const [affaires,setAffaires]=useState(()=>load("cos_affaires",[]));
+  const [newT,setNewT]=useState({titre:"",priorite:"Normal",service:"Commercial"});
+  const [newA,setNewA]=useState({client:"",description:"",montant:"",statut:"En cours"});
+  const [tab,setTab]=useState("taches");
+  useEffect(()=>save("cos_taches",taches),[taches]);
+  useEffect(()=>save("cos_affaires",affaires),[affaires]);
+  const addT=()=>{if(!newT.titre.trim())return;setTaches(t=>[...t,{...newT,id:uid(),done:false,date:today()}]);setNewT({titre:"",priorite:"Normal",service:"Commercial"});};
+  const addA=()=>{if(!newA.client.trim())return;setAffaires(a=>[...a,{...newA,id:uid(),montant:parseFloat(newA.montant)||0}]);setNewA({client:"",description:"",montant:"",statut:"En cours"});};
+  const totalSigne=affaires.filter(a=>a.statut==="Signé").reduce((s,a)=>s+a.montant,0);
+  const commission=totalSigne*0.01;
+  const totalPortefeuille=affaires.reduce((s,a)=>s+a.montant,0);
+  return <div>
+    <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+      {[{label:"Portefeuille",val:`${fmt(totalPortefeuille)} €`,color:C.gold},{label:"Signés",val:`${fmt(totalSigne)} €`,color:C.green},{label:"Commission 1%",val:`${fmt(commission)} €`,color:C.accent},{label:"Tâches ouvertes",val:taches.filter(t=>!t.done).length,color:C.blue}].map(k=>(
+        <div key={k.label} style={S.kpi(k.color)}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3}}>{k.label}</div><div style={{fontSize:20,fontWeight:800,color:k.color,fontFamily:"monospace"}}>{k.val}</div></div>
+      ))}
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:12}}>{["taches","affaires"].map(t=><button key={t} style={S.tabBtn(tab===t)} onClick={()=>setTab(t)}>{t==="taches"?"📋 Tâches":"💼 Affaires"}</button>)}</div>
+    {tab==="taches"&&<div style={S.card}>
+      <div style={{...S.row,marginBottom:10}}>
+        <input style={{...S.input,flex:2}} placeholder="Nouvelle tâche…" value={newT.titre} onChange={e=>setNewT(p=>({...p,titre:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addT()}/>
+        <select style={S.select} value={newT.priorite} onChange={e=>setNewT(p=>({...p,priorite:e.target.value}))}>{["Urgent","Normal","Faible"].map(o=><option key={o}>{o}</option>)}</select>
+        <select style={S.select} value={newT.service} onChange={e=>setNewT(p=>({...p,service:e.target.value}))}>{["Commercial","SAV","Admin","Terrain"].map(o=><option key={o}>{o}</option>)}</select>
+        <button style={S.btn()} onClick={addT}>+ Ajouter</button>
+      </div>
+      {taches.length===0&&<div style={{color:C.textMuted,textAlign:"center",padding:18}}>Aucune tâche.</div>}
+      {taches.map(t=>(
+        <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:`1px solid ${C.border}`,opacity:t.done?0.4:1}}>
+          <input type="checkbox" checked={t.done} onChange={()=>setTaches(ts=>ts.map(x=>x.id===t.id?{...x,done:!x.done}:x))} style={{accentColor:C.accent,width:14,height:14}}/>
+          <div style={{flex:1,textDecoration:t.done?"line-through":"none",fontSize:13}}>{t.titre}</div>
+          <span style={S.tag(SC[t.priorite]||C.textMuted)}>{t.priorite}</span>
+          <span style={S.tag(C.navy)}>{t.service}</span>
+          <span style={{fontSize:11,color:C.textMuted}}>{t.date}</span>
+          <button style={{...S.btn("ghost"),padding:"2px 6px",fontSize:11}} onClick={()=>setTaches(ts=>ts.filter(x=>x.id!==t.id))}>✕</button>
+        </div>
+      ))}
+    </div>}
+    {tab==="affaires"&&<div style={S.card}>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 2fr 1fr 1fr auto",gap:8,marginBottom:10}}>
+        <input style={S.input} placeholder="Client" value={newA.client} onChange={e=>setNewA(p=>({...p,client:e.target.value}))}/>
+        <input style={S.input} placeholder="Description" value={newA.description} onChange={e=>setNewA(p=>({...p,description:e.target.value}))}/>
+        <input style={S.input} placeholder="Montant €" type="number" value={newA.montant} onChange={e=>setNewA(p=>({...p,montant:e.target.value}))}/>
+        <select style={S.select} value={newA.statut} onChange={e=>setNewA(p=>({...p,statut:e.target.value}))}>{["En cours","Relance","Signé","Perdu"].map(o=><option key={o}>{o}</option>)}</select>
+        <button style={S.btn()} onClick={addA}>+</button>
+      </div>
+      {affaires.length===0&&<div style={{color:C.textMuted,textAlign:"center",padding:18}}>Aucune affaire.</div>}
+      {affaires.map(a=>(
+        <div key={a.id} style={{display:"grid",gridTemplateColumns:"2fr 2fr 1fr 1fr auto",gap:8,alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{fontWeight:600,fontSize:13}}>{a.client}</div>
+          <div style={{color:C.textDim,fontSize:12}}>{a.description}</div>
+          <div style={{fontFamily:"monospace",color:a.statut==="Signé"?C.green:C.text,fontSize:13}}>{fmt(a.montant)} €</div>
+          <select style={{...S.select,fontSize:12}} value={a.statut} onChange={e=>setAffaires(as=>as.map(x=>x.id===a.id?{...x,statut:e.target.value}:x))}>{["En cours","Relance","Signé","Perdu"].map(o=><option key={o}>{o}</option>)}</select>
+          <button style={{...S.btn("ghost"),padding:"2px 6px",fontSize:11}} onClick={()=>setAffaires(as=>as.filter(x=>x.id!==a.id))}>✕</button>
+        </div>
+      ))}
+      {affaires.some(a=>a.statut==="Signé")&&<div style={{marginTop:10,padding:"8px 12px",background:`${C.green}15`,borderRadius:6,border:`1px solid ${C.greenDim}`,display:"flex",justifyContent:"space-between"}}>
+        <span style={{color:C.green,fontSize:13}}>Commission (1% signés)</span>
+        <span style={{color:C.green,fontWeight:800,fontFamily:"monospace"}}>{commission.toFixed(2)} €</span>
+      </div>}
+    </div>}
+  </div>;
+}
+
+function ModuleSAV() {
+  const [tab,setTab]=useState("pannes");
+  const [pannes,setPannes]=useState(()=>load("cos_pannes",[]));
+  const [garanties,setGaranties]=useState(()=>load("cos_garanties",[]));
+  const [devis,setDevis]=useState(()=>load("cos_devis_sav",[]));
+  useEffect(()=>save("cos_pannes",pannes),[pannes]);
+  useEffect(()=>save("cos_garanties",garanties),[garanties]);
+  useEffect(()=>save("cos_devis_sav",devis),[devis]);
+  const [np,setNp]=useState({client:"",machine:"",serie:"",type:"Mécanique",description:"",statut:"Ouvert",altior:""});
+  const [ng,setNg]=useState({client:"",machine:"",serie:"",debut:"",fin:"",statut:"En garantie",notes:""});
+  const [nd,setNd]=useState({client:"",ref:"",description:"",montant:"",statut:"En attente"});
+  const addP=()=>{if(!np.client.trim())return;setPannes(p=>[...p,{...np,id:uid(),date:today()}]);setNp({client:"",machine:"",serie:"",type:"Mécanique",description:"",statut:"Ouvert",altior:""});};
+  const addG=()=>{if(!ng.client.trim())return;setGaranties(g=>[...g,{...ng,id:uid()}]);setNg({client:"",machine:"",serie:"",debut:"",fin:"",statut:"En garantie",notes:""});};
+  const addD=()=>{if(!nd.client.trim())return;setDevis(d=>[...d,{...nd,id:uid(),montant:parseFloat(nd.montant)||0,date:today()}]);setNd({client:"",ref:"",description:"",montant:"",statut:"En attente"});};
+  const typeColors={"Mécanique":C.blue,"Électrique":C.orange,"Automatisme":C.purple,"Encollage":C.gold,"Moteur":C.accent,"Autre":C.textMuted};
+  const pannesOuvertes=pannes.filter(p=>p.statut!=="Fermé"&&p.statut!=="Résolu").length;
+  const garExpir=garanties.filter(g=>{if(!g.fin)return false;const j=(new Date(g.fin)-new Date())/(86400000);return j>=0&&j<=30;}).length;
+  const HistoriqueClient=()=>{
+    const [search,setSearch]=useState("");
+    const q=search.toLowerCase();
+    const fp=q?pannes.filter(p=>p.client.toLowerCase().includes(q)):[];
+    const fg=q?garanties.filter(g=>g.client.toLowerCase().includes(q)):[];
+    const fd=q?devis.filter(d=>d.client.toLowerCase().includes(q)):[];
+    return <div>
+      <input style={{...S.input,marginBottom:12}} placeholder="Nom du client…" value={search} onChange={e=>setSearch(e.target.value)}/>
+      {q&&fp.length===0&&fg.length===0&&fd.length===0&&<div style={{color:C.textMuted,textAlign:"center",padding:14}}>Aucun dossier pour "{search}".</div>}
+      {fp.length>0&&<><div style={S.h3}>Pannes ({fp.length})</div>{fp.map(p=><div key={p.id} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:`1px solid ${C.border}`,fontSize:13}}><span style={{color:C.textMuted,fontSize:11,fontFamily:"monospace"}}>{p.date}</span><span style={S.tag(typeColors[p.type]||C.textMuted)}>{p.type}</span><span>{p.machine}</span><span style={S.tag(SC[p.statut]||C.textMuted)}>{p.statut}</span></div>)}</>}
+      {fg.length>0&&<><div style={{...S.h3,marginTop:10}}>Garanties ({fg.length})</div>{fg.map(g=><div key={g.id} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:`1px solid ${C.border}`,fontSize:13}}><span>{g.machine} {g.serie}</span><span style={{color:C.textMuted,fontSize:11}}>{g.debut} → {g.fin}</span><span style={S.tag(SC[g.statut]||C.textMuted)}>{g.statut}</span></div>)}</>}
+      {fd.length>0&&<><div style={{...S.h3,marginTop:10}}>Devis SAV ({fd.length})</div>{fd.map(d=><div key={d.id} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:`1px solid ${C.border}`,fontSize:13}}><span style={{color:C.textMuted,fontSize:11,fontFamily:"monospace"}}>{d.date}</span>{d.ref&&<span style={S.tag(C.navy)}>{d.ref}</span>}<span style={{flex:1}}>{d.description}</span><span style={{fontFamily:"monospace"}}>{fmt(d.montant)} €</span><span style={S.tag(SC[d.statut]||C.textMuted)}>{d.statut}</span></div>)}</>}
+    </div>;
+  };
+  return <div>
+    <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+      {[{label:"Pannes ouvertes",val:pannesOuvertes,color:C.accent},{label:"Garanties actives",val:garanties.filter(g=>g.statut==="En garantie").length,color:C.green},{label:"Expiration <30j",val:garExpir,color:C.gold},{label:"Devis en attente",val:devis.filter(d=>d.statut==="En attente").length,color:C.blue}].map(k=>(
+        <div key={k.label} style={S.kpi(k.color)}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3}}>{k.label}</div><div style={{fontSize:20,fontWeight:800,color:k.color,fontFamily:"monospace"}}>{k.val}</div></div>
+      ))}
+    </div>
+    <div style={{display:"flex",gap:6,marginBottom:12}}>{[["pannes","🔧 Pannes"],["garanties","🛡 Garanties"],["devis","📄 Devis SAV"],["histo","🗂 Historique client"]].map(([id,label])=><button key={id} style={S.tabBtn(tab===id)} onClick={()=>setTab(id)}>{label}</button>)}</div>
+    {tab==="pannes"&&<div style={S.card}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr auto",gap:8,marginBottom:8}}>
+        <input style={S.input} placeholder="Client" value={np.client} onChange={e=>setNp(p=>({...p,client:e.target.value}))}/>
+        <input style={S.input} placeholder="Machine" value={np.machine} onChange={e=>setNp(p=>({...p,machine:e.target.value}))}/>
+        <input style={S.input} placeholder="N° série" value={np.serie} onChange={e=>setNp(p=>({...p,serie:e.target.value}))}/>
+        <select style={S.select} value={np.type} onChange={e=>setNp(p=>({...p,type:e.target.value}))}>{["Mécanique","Électrique","Automatisme","Encollage","Moteur","Autre"].map(o=><option key={o}>{o}</option>)}</select>
+        <select style={S.select} value={np.statut} onChange={e=>setNp(p=>({...p,statut:e.target.value}))}>{["Ouvert","En attente","Escaladé","Résolu","Fermé"].map(o=><option key={o}>{o}</option>)}</select>
+        <input style={S.input} placeholder="N° Altior" value={np.altior} onChange={e=>setNp(p=>({...p,altior:e.target.value}))}/>
+        <button style={S.btn()} onClick={addP}>+</button>
+      </div>
+      <input style={{...S.input,marginBottom:10}} placeholder="Description du problème…" value={np.description} onChange={e=>setNp(p=>({...p,description:e.target.value}))}/>
+      {pannes.length===0&&<div style={{color:C.textMuted,textAlign:"center",padding:16}}>Aucune panne enregistrée.</div>}
+      {pannes.map(p=>(
+        <div key={p.id} style={{padding:"9px 0",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:3}}>
+            <span style={{fontWeight:700,fontSize:13}}>{p.client}</span>
+            <span style={{fontSize:12,color:C.textDim}}>{p.machine}{p.serie&&` · ${p.serie}`}</span>
+            <span style={S.tag(typeColors[p.type]||C.textMuted)}>{p.type}</span>
+            <select style={{...S.select,fontSize:11,padding:"2px 7px"}} value={p.statut} onChange={e=>setPannes(ps=>ps.map(x=>x.id===p.id?{...x,statut:e.target.value}:x))}>{["Ouvert","En attente","Escaladé","Résolu","Fermé"].map(o=><option key={o}>{o}</option>)}</select>
+            {p.altior&&<span style={S.tag(C.navy)}>Altior: {p.altior}</span>}
+            <span style={{fontSize:11,color:C.textMuted,marginLeft:"auto"}}>{p.date}</span>
+            <button style={{...S.btn("ghost"),padding:"2px 6px",fontSize:11}} onClick={()=>setPannes(ps=>ps.filter(x=>x.id!==p.id))}>✕</button>
+          </div>
+          {p.description&&<div style={{fontSize:12,color:C.textDim}}>{p.description}</div>}
+        </div>
+      ))}
+    </div>}
+    {tab==="garanties"&&<div style={S.card}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr auto",gap:8,marginBottom:10}}>
+        <input style={S.input} placeholder="Client" value={ng.client} onChange={e=>setNg(p=>({...p,client:e.target.value}))}/>
+        <input style={S.input} placeholder="Machine" value={ng.machine} onChange={e=>setNg(p=>({...p,machine:e.target.value}))}/>
+        <input style={S.input} placeholder="N° série" value={ng.serie} onChange={e=>setNg(p=>({...p,serie:e.target.value}))}/>
+        <input style={S.input} type="date" value={ng.debut} onChange={e=>setNg(p=>({...p,debut:e.target.value}))}/>
+        <input style={S.input} type="date" value={ng.fin} onChange={e=>setNg(p=>({...p,fin:e.target.value}))}/>
+        <select style={S.select} value={ng.statut} onChange={e=>setNg(p=>({...p,statut:e.target.value}))}>{["En garantie","Hors garantie","Expirée"].map(o=><option key={o}>{o}</option>)}</select>
+        <button style={S.btn()} onClick={addG}>+</button>
+      </div>
+      {garanties.length===0&&<div style={{color:C.textMuted,textAlign:"center",padding:16}}>Aucune garantie.</div>}
+      {garanties.map(g=>{
+        const jr=g.fin?Math.ceil((new Date(g.fin)-new Date())/86400000):null;
+        const ac=jr!==null&&jr<=30&&jr>=0?C.gold:jr!==null&&jr<0?C.accent:C.green;
+        return <div key={g.id} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"9px 0",borderBottom:`1px solid ${C.border}`}}>
+          <span style={{fontWeight:700,fontSize:13}}>{g.client}</span>
+          <span style={{fontSize:12,color:C.textDim}}>{g.machine}{g.serie&&` · ${g.serie}`}</span>
+          {g.debut&&<span style={{fontSize:11,color:C.textMuted}}>Début: {g.debut}</span>}
+          {g.fin&&<span style={{fontSize:11,color:C.textMuted}}>Fin: {g.fin}</span>}
+          {jr!==null&&<span style={S.tag(ac)}>{jr>=0?`${jr}j restants`:"Expirée"}</span>}
+          <span style={S.tag(SC[g.statut]||C.textMuted)}>{g.statut}</span>
+          <button style={{...S.btn("ghost"),padding:"2px 6px",fontSize:11,marginLeft:"auto"}} onClick={()=>setGaranties(gs=>gs.filter(x=>x.id!==g.id))}>✕</button>
+        </div>;
+      })}
+    </div>}
+    {tab==="devis"&&<div style={S.card}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr auto",gap:8,marginBottom:10}}>
+        <input style={S.input} placeholder="Client" value={nd.client} onChange={e=>setNd(p=>({...p,client:e.target.value}))}/>
+        <input style={S.input} placeholder="Réf. devis" value={nd.ref} onChange={e=>setNd(p=>({...p,ref:e.target.value}))}/>
+        <input style={S.input} placeholder="Description" value={nd.description} onChange={e=>setNd(p=>({...p,description:e.target.value}))}/>
+        <input style={S.input} placeholder="Montant €" type="number" value={nd.montant} onChange={e=>setNd(p=>({...p,montant:e.target.value}))}/>
+        <select style={S.select} value={nd.statut} onChange={e=>setNd(p=>({...p,statut:e.target.value}))}>{["En attente","Relance","Accepté","Refusé"].map(o=><option key={o}>{o}</option>)}</select>
+        <button style={S.btn()} onClick={addD}>+</button>
+      </div>
+      {devis.length===0&&<div style={{color:C.textMuted,textAlign:"center",padding:16}}>Aucun devis SAV.</div>}
+      {devis.map(d=>(
+        <div key={d.id} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
+          <span style={{fontWeight:700,fontSize:13}}>{d.client}</span>
+          {d.ref&&<span style={S.tag(C.navy)}>{d.ref}</span>}
+          <span style={{fontSize:12,color:C.textDim,flex:1}}>{d.description}</span>
+          <span style={{fontFamily:"monospace",fontSize:13,color:d.statut==="Accepté"?C.green:C.text}}>{fmt(d.montant)} €</span>
+          <select style={{...S.select,fontSize:11,padding:"2px 7px"}} value={d.statut} onChange={e=>setDevis(ds=>ds.map(x=>x.id===d.id?{...x,statut:e.target.value}:x))}>{["En attente","Relance","Accepté","Refusé"].map(o=><option key={o}>{o}</option>)}</select>
+          <span style={{fontSize:11,color:C.textMuted}}>{d.date}</span>
+          <button style={{...S.btn("ghost"),padding:"2px 6px",fontSize:11}} onClick={()=>setDevis(ds=>ds.filter(x=>x.id!==d.id))}>✕</button>
+        </div>
+      ))}
+    </div>}
+    {tab==="histo"&&<div style={S.card}><HistoriqueClient/></div>}
+  </div>;
+}
+
+function ModuleTerrain() {
+  const [remontees,setRemontees]=useState(()=>load("cos_remontees",[]));
+  const [techniciens,setTechniciens]=useState(()=>load("cos_techniciens",["Rosario","Julien"]));
+  const [newTech,setNewTech]=useState("");
+  const [showTechMgr,setShowTechMgr]=useState(false);
+  useEffect(()=>save("cos_remontees",remontees),[remontees]);
+  useEffect(()=>save("cos_techniciens",techniciens),[techniciens]);
+  const [form,setForm]=useState({technicien:"",client:"",machine:"",categorie:"Technique",type:"Panne répétitive",description:"",criticite:"Normale",statut:"Ouvert"});
+  const [filtre,setFiltre]=useState("Tous");
+  const types={"Technique":["Panne répétitive","Défaut conception","Pièce défectueuse","Problème réglage","Amélioration suggérée"],"Service interne":["Délai livraison pièce","Documentation manquante","Communication interne","Formation insuffisante","Procédure à revoir"]};
+  const critColors={"Critique":C.accent,"Haute":C.orange,"Normale":C.gold,"Basse":C.textMuted};
+  const addTech=()=>{const n=newTech.trim();if(!n||techniciens.includes(n))return;setTechniciens(t=>[...t,n]);setNewTech("");};
+  const removeTech=(nom)=>setTechniciens(t=>t.filter(x=>x!==nom));
+  const add=()=>{if(!form.description.trim())return;setRemontees(r=>[...r,{...form,id:uid(),date:today()}]);setForm({technicien:"",client:"",machine:"",categorie:"Technique",type:"Panne répétitive",description:"",criticite:"Normale",statut:"Ouvert"});};
+  const filtered=filtre==="Tous"?remontees:remontees.filter(r=>r.categorie===filtre||r.statut===filtre||r.criticite===filtre);
+  return <div>
+    <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+      {[{label:"Total remontées",val:remontees.length,color:C.blue},{label:"Critiques",val:remontees.filter(r=>r.criticite==="Critique").length,color:C.accent},{label:"Techniques",val:remontees.filter(r=>r.categorie==="Technique").length,color:C.purple},{label:"Service interne",val:remontees.filter(r=>r.categorie==="Service interne").length,color:C.gold}].map(k=>(
+        <div key={k.label} style={S.kpi(k.color)}><div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3}}>{k.label}</div><div style={{fontSize:20,fontWeight:800,color:k.color,fontFamily:"monospace"}}>{k.val}</div></div>
+      ))}
+    </div>
+    <div style={{...S.card,marginBottom:12,borderColor:showTechMgr?C.accent:C.border}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{...S.h3,marginBottom:0}}>👷 Techniciens ({techniciens.length})</div>
+        <button style={{...S.btn("ghost"),fontSize:11,padding:"3px 10px"}} onClick={()=>setShowTechMgr(s=>!s)}>{showTechMgr?"Fermer":"Gérer"}</button>
+      </div>
+      {!showTechMgr&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>{techniciens.map(t=><span key={t} style={S.tag(C.blue)}>👤 {t}</span>)}</div>}
+      {showTechMgr&&<div style={{marginTop:10}}>
+        <div style={{...S.row,marginBottom:10}}>
+          <input style={{...S.input,maxWidth:220}} placeholder="Prénom du technicien…" value={newTech} onChange={e=>setNewTech(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addTech()}/>
+          <button style={S.btn()} onClick={addTech}>+ Ajouter</button>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {techniciens.map(t=>(
+            <div key={t} style={{display:"flex",alignItems:"center",gap:4,background:C.surfaceHigh,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px 10px"}}>
+              <span style={{fontSize:13}}>👤 {t}</span>
+              <button style={{background:"none",border:"none",color:C.textMuted,cursor:"pointer",fontSize:12,padding:"0 2px",marginLeft:4}} onClick={()=>removeTech(t)}>✕</button>
+            </div>
+          ))}
+        </div>
+      </div>}
+    </div>
+    <div style={S.card}>
+      <div style={S.h3}>Nouvelle remontée</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:8,marginBottom:8}}>
+        <select style={S.select} value={form.technicien} onChange={e=>setForm(p=>({...p,technicien:e.target.value}))}><option value="">Technicien…</option>{techniciens.map(o=><option key={o}>{o}</option>)}</select>
+        <input style={S.input} placeholder="Client concerné" value={form.client} onChange={e=>setForm(p=>({...p,client:e.target.value}))}/>
+        <input style={S.input} placeholder="Machine / référence" value={form.machine} onChange={e=>setForm(p=>({...p,machine:e.target.value}))}/>
+        <select style={S.select} value={form.categorie} onChange={e=>setForm(p=>({...p,categorie:e.target.value,type:types[e.target.value][0]}))}><option>Technique</option><option>Service interne</option></select>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:8,marginBottom:8}}>
+        <select style={S.select} value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}>{(types[form.categorie]||[]).map(o=><option key={o}>{o}</option>)}</select>
+        <select style={S.select} value={form.criticite} onChange={e=>setForm(p=>({...p,criticite:e.target.value}))}>{["Critique","Haute","Normale","Basse"].map(o=><option key={o}>{o}</option>)}</select>
+        <select style={S.select} value={form.statut} onChange={e=>setForm(p=>({...p,statut:e.target.value}))}>{["Ouvert","En traitement","Résolu","Escaladé"].map(o=><option key={o}>{o}</option>)}</select>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <textarea style={{...S.textarea,minHeight:65}} placeholder="Description détaillée…" value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))}/>
+        <button style={{...S.btn(),alignSelf:"flex-end",padding:"8px 18px"}} onClick={add}>+ Enregistrer</button>
+      </div>
+    </div>
+    <div style={{...S.row,marginBottom:10}}>
+      <span style={{fontSize:12,color:C.textMuted}}>Filtrer :</span>
+      {["Tous","Technique","Service interne","Critique","Ouvert","Résolu"].map(f=><button key={f} style={S.tabBtn(filtre===f)} onClick={()=>setFiltre(f)}>{f}</button>)}
+    </div>
+    {filtered.length===0&&<div style={{...S.card,textAlign:"center",color:C.textMuted,padding:20}}>Aucune remontée.</div>}
+    {filtered.map(r=>(
+      <div key={r.id} style={{...S.card,borderLeft:`3px solid ${critColors[r.criticite]||C.textMuted}`}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:5}}>
+          {r.technicien&&<span style={{fontWeight:700,fontSize:13}}>👤 {r.technicien}</span>}
+          {r.client&&<span style={{fontSize:12,color:C.textDim}}>— {r.client}</span>}
+          {r.machine&&<span style={S.tag(C.navy)}>{r.machine}</span>}
+          <span style={S.tag(r.categorie==="Technique"?C.purple:C.gold)}>{r.categorie}</span>
+          <span style={S.tag(critColors[r.criticite]||C.textMuted)}>{r.criticite}</span>
+          <select style={{...S.select,fontSize:11,padding:"2px 7px",marginLeft:"auto"}} value={r.statut} onChange={e=>setRemontees(rs=>rs.map(x=>x.id===r.id?{...x,statut:e.target.value}:x))}>{["Ouvert","En traitement","Résolu","Escaladé"].map(o=><option key={o}>{o}</option>)}</select>
+          <span style={{fontSize:11,color:C.textMuted}}>{r.date}</span>
+          <button style={{...S.btn("ghost"),padding:"2px 6px",fontSize:11}} onClick={()=>setRemontees(rs=>rs.filter(x=>x.id!==r.id))}>✕</button>
+        </div>
+        <div style={{fontSize:12,color:C.textDim}}><span style={S.tag(C.blue)}>{r.type}</span> <span style={{marginLeft:6}}>{r.description}</span></div>
+      </div>
+    ))}
+  </div>;
+}
+
+function ModuleAide() {
+  const [tab,setTab]=useState("rdv");
+  const [loading,setLoading]=useState(false);
+  const [result,setResult]=useState("");
+  const [copied,setCopied]=useState(false);
+  const [rdvForm,setRdvForm]=useState({client:"",secteur:"Agroalimentaire",interlocuteur:"Directeur de production",machine:"Barquettage",contexte:""});
+  const [objection,setObjection]=useState("Prix trop élevé");
+  const [script,setScript]=useState({dept:"",secteur:"Agroalimentaire",machine:"Barquettage"});
+  const objections=["Prix trop élevé","Déjà équipé / concurrent en place","Pas le bon moment / budget gelé","On gère ça en manuel, ça marche","Je dois en parler à ma direction","Votre délai est trop long","Je ne connais pas votre marque"];
+  const genRDV=async()=>{
+    setLoading(true);setResult("");
+    const p=`Coach commercial expert machines d'emballage B2B. Alexis Zaïka (Méca-Système, technico-commercial, background technicien) prépare un RDV :
+Client: ${rdvForm.client||"PME agro"} | Secteur: ${rdvForm.secteur} | Interlocuteur: ${rdvForm.interlocuteur} | Machine: ${rdvForm.machine} | Contexte: ${rdvForm.contexte||"aucun"}
+Génère:
+🎯 OBJECTIF DU RDV (1 phrase)
+📋 5 QUESTIONS À POSER (qualifier le besoin, ordre logique)
+⚠️ POINTS DE VIGILANCE (ce qu'il ne faut pas faire avec ce profil)
+💡 OUVERTURE RECOMMANDÉE (30 secondes, valoriser le background technicien)
+🔑 3 ARGUMENTS CLÉS MÉCA-SYSTÈME pour ce profil`;
+    try{const r=await callClaude(p,900);setResult(r);}catch{setResult("Erreur IA.");}
+    setLoading(false);
+  };
+  const genObjection=async()=>{
+    setLoading(true);setResult("");
+    const p=`Coach commercial B2B machines d'emballage. Alexis Zaïka fait face à : "${objection}"
+Fiche de réponse :
+🎯 CE QUE CETTE OBJECTION SIGNIFIE VRAIMENT
+❌ CE QU'IL NE FAUT PAS DIRE
+✅ RÉPONSE RECOMMANDÉE (script mot pour mot, ton technicien, max 5 phrases)
+🔄 QUESTION DE REBOND
+💡 VARIANTE SI ÇA NE DÉBLOQUE PAS`;
+    try{const r=await callClaude(p,800);setResult(r);}catch{setResult("Erreur IA.");}
+    setLoading(false);
+  };
+  const genScript=async()=>{
+    setLoading(true);setResult("");
+    const p=`Script d'appel téléphonique à froid pour Alexis Zaïka (Méca-Système, technico-commercial, background technicien terrain).
+Dept: ${script.dept||"non précisé"} | Secteur: ${script.secteur} | Machine: ${script.machine}
+Script complet :
+📞 ACCROCHE (10 sec, se démarquer grâce au profil technicien)
+🔍 QUALIFICATION (3 questions)
+💬 PITCH (30 sec si intérêt)
+🚧 OBJECTION FRÉQUENTE + RÉPONSE
+📅 CLOSING (obtenir RDV ou prochaine étape)
+Ton: direct, technique, pas de baratin.`;
+    try{const r=await callClaude(p,900);setResult(r);}catch{setResult("Erreur IA.");}
+    setLoading(false);
+  };
+  const copy=()=>{navigator.clipboard.writeText(result);setCopied(true);setTimeout(()=>setCopied(false),2000);};
+  return <div>
+    <div style={{display:"flex",gap:6,marginBottom:12}}>{[["rdv","📅 Prépa RDV"],["objections","🛡 Objections"],["scripts","📞 Script appel"]].map(([id,label])=><button key={id} style={S.tabBtn(tab===id)} onClick={()=>{setTab(id);setResult("");}}>{label}</button>)}</div>
+    {tab==="rdv"&&<div style={S.card}>
+      <div style={S.h2}>📅 Préparation RDV</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Client</div><input style={S.input} placeholder="Ex: Salaisons Jouvin" value={rdvForm.client} onChange={e=>setRdvForm(p=>({...p,client:e.target.value}))}/></div>
+        <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Secteur</div><select style={{...S.select,width:"100%"}} value={rdvForm.secteur} onChange={e=>setRdvForm(p=>({...p,secteur:e.target.value}))}>{["Agroalimentaire","Logistique","Industrie","Cosmétique"].map(o=><option key={o}>{o}</option>)}</select></div>
+        <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Interlocuteur</div><select style={{...S.select,width:"100%"}} value={rdvForm.interlocuteur} onChange={e=>setRdvForm(p=>({...p,interlocuteur:e.target.value}))}>{["Directeur de production","Directeur général","Responsable maintenance","Acheteur","Chef d'atelier"].map(o=><option key={o}>{o}</option>)}</select></div>
+        <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Machine</div><select style={{...S.select,width:"100%"}} value={rdvForm.machine} onChange={e=>setRdvForm(p=>({...p,machine:e.target.value}))}>{["Barquettage","Palettisation","Encaissage","Cerclage","Fardelage"].map(o=><option key={o}>{o}</option>)}</select></div>
+      </div>
+      <div style={{marginBottom:10}}><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Contexte connu</div><textarea style={{...S.textarea,minHeight:55}} placeholder="Ex: rencontré en salon, ligne manuelle, budget évoqué…" value={rdvForm.contexte} onChange={e=>setRdvForm(p=>({...p,contexte:e.target.value}))}/></div>
+      <button style={S.btn()} onClick={genRDV} disabled={loading}>{loading?"⏳ Génération…":"⚡ Générer fiche RDV"}</button>
+    </div>}
+    {tab==="objections"&&<div style={S.card}>
+      <div style={S.h2}>🛡 Réponses aux objections</div>
+      <div style={{marginBottom:12}}><div style={{fontSize:12,color:C.textMuted,marginBottom:8}}>Sélectionne l'objection :</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{objections.map(o=><button key={o} style={{...S.tabBtn(objection===o),fontSize:12}} onClick={()=>setObjection(o)}>{o}</button>)}</div></div>
+      <button style={S.btn()} onClick={genObjection} disabled={loading}>{loading?"⏳…":"⚡ Générer réponse"}</button>
+    </div>}
+    {tab==="scripts"&&<div style={S.card}>
+      <div style={S.h2}>📞 Script d'appel à froid</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
+        <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Département</div><input style={S.input} placeholder="Ex: 76" value={script.dept} onChange={e=>setScript(p=>({...p,dept:e.target.value}))}/></div>
+        <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Secteur</div><select style={{...S.select,width:"100%"}} value={script.secteur} onChange={e=>setScript(p=>({...p,secteur:e.target.value}))}>{["Agroalimentaire","Logistique","Industrie","Cosmétique"].map(o=><option key={o}>{o}</option>)}</select></div>
+        <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Machine</div><select style={{...S.select,width:"100%"}} value={script.machine} onChange={e=>setScript(p=>({...p,machine:e.target.value}))}>{["Barquettage","Palettisation","Encaissage","Cerclage"].map(o=><option key={o}>{o}</option>)}</select></div>
+      </div>
+      <button style={S.btn()} onClick={genScript} disabled={loading}>{loading?"⏳…":"⚡ Générer script"}</button>
+    </div>}
+    {result&&<div style={S.card}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+        <span style={{fontSize:12,color:C.textMuted}}>Résultat IA</span>
+        <button style={S.btn("ghost")} onClick={copy}>{copied?"✅ Copié !":"📋 Copier"}</button>
+      </div>
+      <div style={{background:C.surfaceHigh,borderRadius:8,padding:14,fontSize:13,lineHeight:1.8,whiteSpace:"pre-wrap",border:`1px solid ${C.border}`}}>{result}</div>
+    </div>}
+  </div>;
+}
+
+function ModuleProspects() {
+  const [rdvs,setRdvs]=useState([{id:uid(),ville:"",heure:"09:00",client:""}]);
+  const [dept,setDept]=useState("");
+  const [secteur,setSecteur]=useState("Agroalimentaire");
+  const [type,setType]=useState("Barquettage");
+  const [pointDepart,setPointDepart]=useState("");
+  const [loading,setLoading]=useState(false);
+  const [result,setResult]=useState("");
+  const [history,setHistory]=useState(()=>load("cos_prospects_history",[]));
+  const [copied,setCopied]=useState(false);
+  const [modeRdv,setModeRdv]=useState(true);
+  useEffect(()=>save("cos_prospects_history",history.slice(-10)),[history]);
+  const addRdv=()=>setRdvs(r=>[...r,{id:uid(),ville:"",heure:"14:00",client:""}]);
+  const removeRdv=(id)=>setRdvs(r=>r.filter(x=>x.id!==id));
+  const updateRdv=(id,k,v)=>setRdvs(r=>r.map(x=>x.id===id?{...x,[k]:v}:x));
+  const generate=useCallback(async()=>{
+    const rdvsSaisis=rdvs.filter(r=>r.ville.trim());
+    if(modeRdv&&rdvsSaisis.length===0&&!dept.trim())return;
+    if(!modeRdv&&!dept.trim())return;
+    setLoading(true);setResult("");
+    let prompt;
+    if(modeRdv&&rdvsSaisis.length>0){
+      const rdvList=rdvsSaisis.map((r,i)=>`RDV ${i+1}: ${r.heure} — ${r.client?`${r.client}, `:""}${r.ville}`).join("\n");
+      const departInfo=pointDepart.trim()?`Point de départ: ${pointDepart}`:"";
+      const deptInfo=dept.trim()?`Département(s): ${dept}`:"";
+      prompt=`Expert commercial terrain Méca-Système (barquettage, encaissage, palettisation), spécialiste tournées commerciales France.
+Alexis Zaïka a ces RDV aujourd'hui :
+${rdvList}
+${departInfo}
+${deptInfo}
+Secteur: ${secteur} | Machine: ${type}
+Génère un PLAN DE TOURNÉE OPTIMISÉ avec prospects EN ROUTE entre les RDV.
+🗺️ PLAN DE JOURNÉE (résumé trajet logique)
+⏰ AVANT ${rdvsSaisis[0]?.heure||"premier RDV"} — Zone: ${rdvsSaisis[0]?.ville||"départ"}
+[2-3 prospects]
+${rdvsSaisis.slice(0,-1).map((r,i)=>`🔀 ENTRE RDV ${i+1} (${r.ville}) ET RDV ${i+2} (${rdvsSaisis[i+1]?.ville||"suivant"})\n[2-3 prospects sur la route]`).join("\n\n")}
+🏁 APRÈS ${rdvsSaisis[rdvsSaisis.length-1]?.heure||"dernier RDV"} — Zone: ${rdvsSaisis[rdvsSaisis.length-1]?.ville||"fin"}
+[1-2 prospects direction retour]
+Pour chaque prospect:
+🏭 [NOM] 📍 Ville 👤 Interlocuteur 📞 Pitch terrain (2 lignes) ⭐ Priorité
+Règles: PME 20+ salariés. Barquettage=compétitif. Encaissage US=qualifier avec prudence.`;
+    } else {
+      prompt=`Expert commercial terrain Méca-Système. 6 prospects PME, département ${dept}, secteur: ${secteur}, machine: ${type}.
+Pour chaque: 🏭 [NOM] 📍 Ville 👤 Interlocuteur 📞 Pitch terrain (2 lignes) ⭐ Priorité
+Règles: PME 20+ salariés. Barquettage=compétitif. Encaissage US=qualifier avec prudence.`;
+    }
+    try{
+      const r=await callClaude(prompt,1200);
+      setResult(r);
+      const label=modeRdv&&rdvsSaisis.length>0?rdvsSaisis.map(r=>r.ville).join(" → "):dept;
+      setHistory(h=>[{label,secteur,type,date:new Date().toLocaleDateString("fr-FR"),result:r},...h]);
+    }catch{setResult("Erreur IA.");}
+    setLoading(false);
+  },[dept,secteur,type,rdvs,modeRdv,pointDepart]);
+  const copy=()=>{navigator.clipboard.writeText(result);setCopied(true);setTimeout(()=>setCopied(false),2000);};
+  return <div>
+    <div style={S.card}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <div style={S.h2}>🎯 Génération de prospects par IA</div>
+        <div style={{display:"flex",gap:6}}>
+          <button style={S.tabBtn(modeRdv)} onClick={()=>setModeRdv(true)}>📅 Avec mes RDV du jour</button>
+          <button style={S.tabBtn(!modeRdv)} onClick={()=>setModeRdv(false)}>🗺️ Par département</button>
+        </div>
+      </div>
+      {modeRdv&&<div>
+        <div style={{marginBottom:8}}><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Point de départ</div><input style={{...S.input,maxWidth:280}} placeholder="Ex: Rouen, Amiens…" value={pointDepart} onChange={e=>setPointDepart(e.target.value)}/></div>
+        <div style={{marginBottom:10}}>
+          {rdvs.map((r,i)=>(
+            <div key={r.id} style={{display:"grid",gridTemplateColumns:"70px 100px 1fr 1fr auto",gap:8,marginBottom:8,alignItems:"center"}}>
+              <div style={{...S.tag(C.accent),textAlign:"center",padding:"6px 0"}}>RDV {i+1}</div>
+              <input style={S.input} type="time" value={r.heure} onChange={e=>updateRdv(r.id,"heure",e.target.value)}/>
+              <input style={S.input} placeholder="Ville du RDV" value={r.ville} onChange={e=>updateRdv(r.id,"ville",e.target.value)}/>
+              <input style={S.input} placeholder="Client (optionnel)" value={r.client} onChange={e=>updateRdv(r.id,"client",e.target.value)}/>
+              {rdvs.length>1&&<button style={{...S.btn("ghost"),padding:"2px 8px"}} onClick={()=>removeRdv(r.id)}>✕</button>}
+            </div>
+          ))}
+          <button style={{...S.btn("secondary"),fontSize:12,padding:"5px 12px"}} onClick={addRdv}>+ Ajouter un RDV</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
+          <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Département(s)</div><input style={S.input} placeholder="Ex: 76, 60…" value={dept} onChange={e=>setDept(e.target.value)}/></div>
+          <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Secteur</div><select style={{...S.select,width:"100%"}} value={secteur} onChange={e=>setSecteur(e.target.value)}>{["Agroalimentaire","Logistique","Industrie","Cosmétique"].map(o=><option key={o}>{o}</option>)}</select></div>
+          <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Machine</div><select style={{...S.select,width:"100%"}} value={type} onChange={e=>setType(e.target.value)}>{["Barquettage","Palettisation","Cerclage","Encaissage","Fardelage"].map(o=><option key={o}>{o}</option>)}</select></div>
+        </div>
+        <button style={{...S.btn(),padding:"9px 28px"}} onClick={generate} disabled={loading}>{loading?"⏳ Optimisation…":"🗺️ Générer plan de tournée"}</button>
+      </div>}
+      {!modeRdv&&<div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:10,marginBottom:12}}>
+          <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Département</div><input style={S.input} placeholder="Ex: 76…" value={dept} onChange={e=>setDept(e.target.value)} onKeyDown={e=>e.key==="Enter"&&generate()}/></div>
+          <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Secteur</div><select style={{...S.select,width:"100%"}} value={secteur} onChange={e=>setSecteur(e.target.value)}>{["Agroalimentaire","Logistique","Industrie","Cosmétique"].map(o=><option key={o}>{o}</option>)}</select></div>
+          <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Machine</div><select style={{...S.select,width:"100%"}} value={type} onChange={e=>setType(e.target.value)}>{["Barquettage","Palettisation","Cerclage","Encaissage","Fardelage"].map(o=><option key={o}>{o}</option>)}</select></div>
+          <div style={{display:"flex",alignItems:"flex-end"}}><button style={{...S.btn(),padding:"8px 20px"}} onClick={generate} disabled={loading}>{loading?"⏳…":"⚡ Générer"}</button></div>
+        </div>
+      </div>}
+      {result&&<div style={{marginTop:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+          <span style={{fontSize:12,color:C.textMuted}}>{modeRdv?"Plan de tournée":"Dept. "+dept+" — "+secteur}</span>
+          <button style={S.btn("ghost")} onClick={copy}>{copied?"✅ Copié !":"📋 Copier"}</button>
+        </div>
+        <div style={{background:C.surfaceHigh,borderRadius:8,padding:14,fontSize:13,lineHeight:1.9,whiteSpace:"pre-wrap",border:`1px solid ${C.border}`}}>{result}</div>
+      </div>}
+    </div>
+    {history.length>0&&<div style={S.card}>
+      <div style={S.h3}>Historique</div>
+      {history.map((h,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${C.border}`}}>
+        <span style={{fontSize:13}}><b>{h.label}</b> — {h.secteur} — {h.type}</span>
+        <div style={S.row}><span style={{fontSize:11,color:C.textMuted}}>{h.date}</span><button style={{...S.btn("ghost"),padding:"3px 9px",fontSize:11}} onClick={()=>setResult(h.result)}>Voir</button></div>
+      </div>)}
+    </div>}
+  </div>;
+}
+
+function ModuleNewsletter() {
+  const [semaine,setSemaine]=useState(()=>{const d=new Date(),j=new Date(d.getFullYear(),0,1);return Math.ceil(((d-j)/86400000+j.getDay()+1)/7);});
+  const [loading,setLoading]=useState(false);
+  const [result,setResult]=useState("");
+  const [history,setHistory]=useState(()=>load("cos_newsletter_history",[]));
+  const [copied,setCopied]=useState(false);
+  const [angle,setAngle]=useState("Général");
+  useEffect(()=>save("cos_newsletter_history",history.slice(-8)),[history]);
+  const generate=useCallback(async()=>{
+    setLoading(true);setResult("");
+    const prompt=`Analyste marché Méca-Système. Newsletter veille S${semaine} ${new Date().getFullYear()}. Angle: ${angle}.
+📦 MARCHÉ EMBALLAGE & CARTON [3 points concrets avec chiffres + implication commerciale]
+🌾 AGRO-ALIMENTAIRE FRANCE [3 actualités PME françaises + angle prospection]
+🤖 LOGISTIQUE & AUTOMATISATION [2-3 tendances fin de ligne]
+💡 LEÇON COMMERCIALE DE LA SEMAINE [1 technique B2B illustrée par un fait ci-dessus]
+🎯 SIGNAL CHAUD [1 opportunité à surveiller cette semaine]
+--- Méca-Système | S${semaine} | Alexis Zaïka — Normandie, HdF, IDF, CVdL`;
+    try{const r=await callClaude(prompt,1000);setResult(r);setHistory(h=>[{semaine,angle,date:new Date().toLocaleDateString("fr-FR"),result:r},...h]);}catch{setResult("Erreur.");}
+    setLoading(false);
+  },[semaine,angle]);
+  const copy=()=>{navigator.clipboard.writeText(result);setCopied(true);setTimeout(()=>setCopied(false),2000);};
+  return <div>
+    <div style={S.card}>
+      <div style={S.h2}>📰 Newsletter veille marché</div>
+      <div style={{...S.row,marginBottom:12}}>
+        <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Semaine</div><input style={{...S.input,width:65}} type="number" value={semaine} onChange={e=>setSemaine(parseInt(e.target.value)||semaine)}/></div>
+        <div><div style={{fontSize:12,color:C.textMuted,marginBottom:4}}>Angle</div><select style={S.select} value={angle} onChange={e=>setAngle(e.target.value)}>{["Général","Focus carton","Focus agro","Focus automatisation","Focus PPWR"].map(o=><option key={o}>{o}</option>)}</select></div>
+        <div style={{alignSelf:"flex-end"}}><button style={{...S.btn(),padding:"8px 24px"}} onClick={generate} disabled={loading}>{loading?"⏳ Rédaction…":`📝 Générer S${semaine}`}</button></div>
+      </div>
+      {result&&<div>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+          <span style={{fontSize:12,color:C.textMuted}}>S{semaine} — {angle}</span>
+          <button style={S.btn("ghost")} onClick={copy}>{copied?"✅ Copié !":"📋 Copier"}</button>
+        </div>
+        <textarea style={{...S.textarea,minHeight:320}} value={result} onChange={e=>setResult(e.target.value)}/>
+      </div>}
+    </div>
+    {history.length>0&&<div style={S.card}>
+      <div style={S.h3}>Archives</div>
+      {history.map((h,i)=><div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${C.border}`}}>
+        <span style={{fontSize:13}}>S<b>{h.semaine}</b> — {h.angle}</span>
+        <div style={S.row}><span style={{fontSize:11,color:C.textMuted}}>{h.date}</span><button style={{...S.btn("ghost"),padding:"3px 9px",fontSize:11}} onClick={()=>setResult(h.result)}>Voir</button></div>
+      </div>)}
+    </div>}
+  </div>;
+}
+
+function ModuleROI() {
+  const [v,setV]=useState({prixMachine:85000,maintenance:3500,gainMain:2,tauxHoraire:18,postesSupprime:1,prixUnitaire:0.15,rebut:0.02,production:50000});
+  const set=(k,val)=>setV(p=>({...p,[k]:parseFloat(val)||0}));
+  const gainMain=v.gainMain*v.tauxHoraire*v.postesSupprime*52*35;
+  const gainMatiere=v.production*v.prixUnitaire*v.rebut;
+  const gainTotal=gainMain+gainMatiere;
+  const coutTotal=v.prixMachine+v.maintenance;
+  const retourMois=gainTotal>0?(coutTotal/gainTotal)*12:0;
+  const roi1=gainTotal>0?((gainTotal-coutTotal)/coutTotal*100):0;
+  const roi3=gainTotal>0?((gainTotal*3-coutTotal)/coutTotal*100):0;
+  const Field=({label,k,unit,note})=>(
+    <div style={{marginBottom:10}}>
+      <div style={{fontSize:12,color:C.textMuted,marginBottom:3}}>{label}{note&&<span style={{color:C.accent,marginLeft:6,fontSize:11}}>{note}</span>}</div>
+      <div style={S.row}><input style={{...S.input,width:110}} type="number" value={v[k]} onChange={e=>set(k,e.target.value)}/>{unit&&<span style={{fontSize:12,color:C.textMuted}}>{unit}</span>}</div>
+    </div>
+  );
+  return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+    <div style={S.card}>
+      <div style={S.h2}>🔢 Paramètres client</div>
+      <div style={S.h3}>Investissement</div>
+      <Field label="Prix machine" k="prixMachine" unit="€"/>
+      <Field label="Maintenance annuelle" k="maintenance" unit="€/an"/>
+      <div style={S.h3}>Main d'œuvre</div>
+      <Field label="Gain heures/semaine" k="gainMain" unit="h/sem"/>
+      <Field label="Taux horaire chargé" k="tauxHoraire" unit="€/h"/>
+      <Field label="Postes supprimés/redéployés" k="postesSupprime" unit=""/>
+      <div style={S.h3}>Matière & production</div>
+      <Field label="Production annuelle" k="production" unit="unités/an"/>
+      <Field label="Prix unitaire emballage" k="prixUnitaire" unit="€/unité"/>
+      <Field label="Taux de rebut actuel" k="rebut" unit="décimal" note="⚠️ 0.02 = 2%"/>
+    </div>
+    <div>
+      <div style={{...S.card,borderTop:`3px solid ${C.green}`}}>
+        <div style={S.h2}>📊 Résultats ROI</div>
+        {[{label:"Gain main d'œuvre / an",val:gainMain,color:C.green},{label:"Gain matière / an",val:gainMatiere,color:C.gold},{label:"Gain total annuel",val:gainTotal,color:C.text,bold:true},{label:"Investissement total",val:coutTotal,color:C.accent}].map(r=>(
+          <div key={r.label} style={{display:"flex",justifyContent:"space-between",padding:"7px 0",borderBottom:`1px solid ${C.border}`}}>
+            <span style={{fontSize:13,color:C.textDim}}>{r.label}</span>
+            <span style={{fontFamily:"monospace",fontWeight:r.bold?800:600,color:r.color}}>{fmt(r.val)} €</span>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+        {[{label:"Retour invest.",val:retourMois>0?`${retourMois.toFixed(1)} mois`:"—",color:C.accent},{label:"ROI an 1",val:gainTotal>0?`${roi1.toFixed(0)} %`:"—",color:C.gold},{label:"ROI an 3",val:gainTotal>0?`${roi3.toFixed(0)} %`:"—",color:C.green}].map(k=>(
+          <div key={k.label} style={{...S.card,textAlign:"center",borderTop:`3px solid ${k.color}`,marginBottom:0}}>
+            <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:3}}>{k.label}</div>
+            <div style={{fontSize:20,fontWeight:800,color:k.color,fontFamily:"monospace"}}>{k.val}</div>
+          </div>
+        ))}
+      </div>
+      {gainTotal>0&&retourMois>0&&<div style={{...S.card,background:`${C.green}10`,border:`1px solid ${C.greenDim}`,marginTop:0}}>
+        <div style={{fontSize:12,color:C.textMuted,marginBottom:6}}>📢 Phrase de closing</div>
+        <div style={{fontSize:13,color:C.text,lineHeight:1.7,fontStyle:"italic"}}>"La machine se rembourse en <b style={{color:C.green}}>{retourMois.toFixed(0)} mois</b>. Ensuite elle vous rapporte <b style={{color:C.green}}>{fmt(gainTotal)} €</b> par an net."</div>
+      </div>}
+    </div>
+  </div>;
+}
+
+function App() {
+  const [module,setModule]=useState("taches");
+  const affaires=load("cos_affaires",[]);
+  const taches=load("cos_taches",[]);
+  const pannes=load("cos_pannes",[]);
+  const totalSigne=affaires.filter(a=>a.statut==="Signé").reduce((s,a)=>s+a.montant,0);
+  const commission=totalSigne*0.01;
+  const nav=[
+    {id:"taches",label:"📋 Tâches & Affaires"},
+    {id:"sav",label:"🔧 SAV"},
+    {id:"terrain",label:"📡 Remontées terrain"},
+    {id:"aide",label:"🎓 Aide commerciale IA"},
+    {id:"prospects",label:"🎯 Prospects IA"},
+    {id:"newsletter",label:"📰 Newsletter"},
+    {id:"roi",label:"🔢 ROI"},
+  ];
+  return <div style={S.app}>
+    <div style={S.topBar}>
+      <div style={S.logo}>⚙ Méca-Système</div>
+      <div style={{width:1,height:18,background:C.border}}/>
+      {nav.map(n=><button key={n.id} style={S.navBtn(module===n.id)} onClick={()=>setModule(n.id)}>{n.label}</button>)}
+    </div>
+    <div style={S.main}>
+      {module==="taches"&&<ModuleTaches/>}
+      {module==="sav"&&<ModuleSAV/>}
+      {module==="terrain"&&<ModuleTerrain/>}
+      {module==="aide"&&<ModuleAide/>}
+      {module==="prospects"&&<ModuleProspects/>}
+      {module==="newsletter"&&<ModuleNewsletter/>}
+      {module==="roi"&&<ModuleROI/>}
+    </div>
+    <div style={S.statusBar}>
+      <div style={{fontSize:11,color:C.accentDim,fontFamily:"monospace"}}>● LIVE</div>
+      {[{label:"Signés",val:`${fmt(totalSigne)} €`},{label:"Commission",val:`${fmt(commission)} €`},{label:"Tâches",val:taches.filter(t=>!t.done).length},{label:"Pannes ouvertes",val:pannes.filter(p=>p.statut!=="Fermé"&&p.statut!=="Résolu").length},{label:"Affaires",val:affaires.length}].map(s=>(
+        <div key={s.label} style={S.statusItem}><span style={S.statusLabel}>{s.label}</span><span style={S.statusVal}>{s.val}</span></div>
+      ))}
+      <div style={{flex:1}}/>
+      <div style={{fontSize:11,color:C.textMuted,fontFamily:"monospace"}}>{new Date().toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})}</div>
+    </div>
+  </div>;
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
