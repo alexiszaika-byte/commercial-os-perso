@@ -66,7 +66,7 @@ const SC={
 
 const callClaude=async(prompt,maxTokens=1000)=>{
   const res=await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST",headers:{"Content-Type":"application/json"},
+    method:"POST",headers:{"Content-Type":"application/json","x-api-key":"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","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
     body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:maxTokens,messages:[{role:"user",content:prompt}]})
   });
   const data=await res.json();
